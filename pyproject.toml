@@ -1,0 +1,12 @@
+[project]
+name = "astrumotaku"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "py-cord>=2.6.1",
+    "python-dotenv>=1.1.1",
+    "waifuim>=1.1.1",
+    "waifuim-py>=4.3.0",
+]
