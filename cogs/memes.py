@@ -23,12 +23,15 @@ def load_config():
     try:
         with open(CONFIG_PATH, "r", encoding="utf-8") as f:
             data = json.load(f)
+            
             for k, v in DEFAULT_CONFIG.items():
                 data.setdefault(k, v)
+
             return data
     except FileNotFoundError:
         save_config(DEFAULT_CONFIG)
         return DEFAULT_CONFIG.copy()
+    
     except Exception:
         logger.exception("Failed Loading Memes Config - Using Defaults")
         return DEFAULT_CONFIG.copy()
@@ -91,23 +94,19 @@ class AnimeMemes(commands.Cog):
         requester = getattr(ctx_or_channel, "author", None)
         embed = discord.Embed(
             title=f"😂 Anime Meme - {title}",
-            description=f"**Author : ** u/{author}**\n",
+            description=f"**Author : u/{author}**\n",
             url=post_url,
             color=discord.Color.random(),
         )
         embed.set_image(url=img_url)
-        embed.set_footer(
-            text=(
-                f"Requested By {requester.name}"
-                if requester
-                else "Daily Dose of Weeb Humor ✨"
-            ),
-            icon_url=(
-                getattr(requester, "display_avatar", None).url
-                if requester
-                else discord.Embed.Empty
-            ),
-        )
+
+        if requester:
+            embed.set_footer(
+                text=f"Requested By {requester.name}",
+                icon_url=requester.display_avatar.url,
+            )
+        else:
+            embed.set_footer(text="Daily Dose of Weeb Humor ✨")
         return embed
 
     @discord.slash_command(name="meme", description="Get A Random Anime Meme")
