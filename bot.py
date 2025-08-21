@@ -36,6 +36,9 @@ async def on_ready():
 async def load_extensions():
     logger.info("------ Loading Extensions -----")
     bot.load_extension("cogs.waifu")
+    bot.load_extension("cogs.memes")
+    bot.load_extension("cogs.quotes")
+    bot.load_extension("cogs.config")
 
 
 async def main():
