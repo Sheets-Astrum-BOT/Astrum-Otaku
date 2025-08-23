@@ -12,14 +12,14 @@ QUOTES_CONFIG_PATH = "quotesConfig.json"
 
 MEME_DEFAULT_CONFIG = {
     "enabled": False,
-    "channel_id": None,
+    "channel_id": [],
     "interval_minutes": 60,
 }
 
 
 DEFAULT_QUOTES_CONFIG = {
     "enabled": False,
-    "channel_id": None,
+    "channel_id": [],
     "interval_minutes": 60,
 }
 
@@ -71,10 +71,8 @@ def save_quotes_config(cfg):
 
 
 class Config(commands.Cog):
-    # Top-level group: /config
     config = discord.SlashCommandGroup("config", "Bot Configuration Commands")
 
-    # Subgroups: /config meme ... and /config quote ...
     meme = config.create_subgroup("meme", "Configure Meme Posting")
     quote = config.create_subgroup("quote", "Configure Quote Posting")
 
@@ -114,7 +112,10 @@ class Config(commands.Cog):
     # ───── MAIN CONFIG COMMAND (help) ─────
     @config.command(name="help", description="Show config help")
     async def config_help(self, ctx: discord.ApplicationContext):
-        await ctx.respond("Use `/config meme ...` or `/config quote ...` to manage settings.", ephemeral=True)
+        await ctx.respond(
+            "Use `/config meme ...` or `/config quote ...` to manage settings.",
+            ephemeral=True,
+        )
 
     # ───── MEME CONFIG ─────
     @meme.command(name="set", description="Set Meme Posting Config")
@@ -147,7 +148,12 @@ class Config(commands.Cog):
             updates["enabled"] = toggle.lower() == "true"
 
         if channel is not None:
-            updates["channel_id"] = channel.id
+            current = self.config.get("channel_id") or []
+
+            if channel.id not in current:
+                current.append(channel.id)
+
+            updates["channel_id"] = current
 
         if interval is not None:
             if interval < 10:
@@ -163,8 +169,10 @@ class Config(commands.Cog):
 
     @meme.command(name="show", description="Show Current Meme Config")
     async def meme_show(self, ctx):
+
         cfg = self.config
-        channel = f"<#{cfg['channel_id']}>" if cfg["channel_id"] else "Not Set"
+        chlist = cfg.get("channel_id") or []
+        channel = ", ".join([f"<#{c}>" for c in chlist]) if chlist else "Not Set"
 
         embed = discord.Embed(
             title="⚙️ Meme Config",
@@ -210,7 +218,12 @@ class Config(commands.Cog):
             updates["enabled"] = toggle.lower() == "true"
 
         if channel is not None:
-            updates["channel_id"] = channel.id
+            current = self.quotes_config.get("channel_id") or []
+
+            if channel.id not in current:
+                current.append(channel.id)
+            
+            updates["channel_id"] = current
 
         if interval is not None:
             if interval < 10:
@@ -222,12 +235,13 @@ class Config(commands.Cog):
         if updates:
             await self.update_and_confirm_quotes(ctx, updates)
         else:
-            await ctx.respond("⚠️ No Changes Porvided.", ephemeral=True)
+            await ctx.respond("⚠️ No Changes Provided.", ephemeral=True)
 
     @quote.command(name="show", description="Show Current Quote Config")
     async def quote_show(self, ctx):
         cfg = self.quotes_config
-        channel = f"<#{cfg['channel_id']}>" if cfg["channel_id"] else "Not Set"
+        chlist = cfg.get("channel_id") or []
+        channel = ", ".join([f"<#{c}>" for c in chlist]) if chlist else "Not Set"
 
         embed = discord.Embed(
             title="⚙️ Quotes Config",
