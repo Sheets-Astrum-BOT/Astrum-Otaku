@@ -14,7 +14,7 @@ CONFIG_PATH = "memesConfig.json"
 
 DEFAULT_CONFIG = {
     "enabled": False,
-    "channel_id": None,
+    "channel_id": [],
     "interval_minutes": 60,
 }
 
@@ -133,26 +133,27 @@ class AnimeMemes(commands.Cog):
     async def auto_task(self):
         try:
             cfg = self.config
-            if not cfg.get("enabled") or not cfg.get("channel_id"):
+            if not cfg.get("enabled") or not cfg.get("channel_id", []):
                 return
 
-            channel = self.bot.get_channel(cfg.get("channel_id"))
-            if not channel:
-                logger.warning("Configured Memes Channel Not Found - Disabling")
-                cfg["enabled"] = False
-                save_config(cfg)
-                return
+            for channel_id in cfg.get("channel_id", []):
+                channel = self.bot.get_channel(channel_id)
+                if not channel:
+                    logger.warning("Configured Memes Channel Not Found - Disabling")
+                    cfg["enabled"] = False
+                    save_config(cfg)
+                    return
 
-            img_url, title, post_url, author = await self.fetch_meme()
-            embed = await self.make_embed(channel, img_url, title, post_url, author)
+                img_url, title, post_url, author = await self.fetch_meme()
+                embed = await self.make_embed(channel, img_url, title, post_url, author)
 
-            await channel.send(embed=embed)
-            logger.info(f"Auto Posted Meme To {channel.id}")
+                await channel.send(embed=embed)
+                logger.info(f"Auto Posted Meme To {channel.id}")
 
-            interval = max(10, int(cfg.get("interval_minutes", 180)))
-            extra = interval - 5
-            if extra > 0:
-                await asyncio.sleep(extra * 60)
+                interval = max(10, int(cfg.get("interval_minutes", 180)))
+                extra = interval - 5
+                if extra > 0:
+                    await asyncio.sleep(extra * 60)
 
         except Exception:
             logger.exception("Error In Auto Meme Task")

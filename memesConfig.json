@@ -1,5 +1,7 @@
 {
   "enabled": true,
-  "channel_id": 1408147635524603924,
+  "channel_id": [
+    1408147635524603924
+  ],
   "interval_minutes": 60
 }
