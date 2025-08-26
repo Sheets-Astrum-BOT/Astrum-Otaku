@@ -1,4 +1,5 @@
 import json
+import time
 import random
 import discord
 import aiohttp
@@ -32,9 +33,9 @@ NSFW_CHANCE = 0.005
 DEFAULT_CONFIG = {
     "enabled": True,
     "channel_id": [1401985460808712293],
-        "interval_minutes": 60,
-        "only_spawner": False,
-        "owner_id": [727012870683885578],
+    "interval_minutes": 60,
+    "only_spawner": False,
+    "owner_id": [727012870683885578],
 }
 
 
@@ -103,7 +104,7 @@ class Waifu(commands.Cog):
 
                         channel = self.bot.get_channel(ch_id)
                         if not channel:
-                            continue
+                            logger.warning("Configured Waifu Channel Not Found - Disabling")
 
                         do_nsfw = random.random() < NSFW_CHANCE
                         tag_list = NWAIFU_CATEGORIES if do_nsfw else WAIFU_CATEGORIES
@@ -115,7 +116,9 @@ class Waifu(commands.Cog):
 
                         try:
                             if self.db:
-                                waifu_api_id = image.get("image_id") or image.get("signature")
+                                waifu_api_id = image.get("image_id") or image.get(
+                                    "signature"
+                                )
                                 artist = image.get("artist") or {}
                                 tags = [t.get("name") for t in image.get("tags", [])]
 
@@ -124,12 +127,20 @@ class Waifu(commands.Cog):
                                     image.get("url"),
                                     image.get("preview_url"),
                                     image.get("source"),
-                                    artist.get("name") if isinstance(artist, dict) else None,
-                                    artist.get("twitter") if isinstance(artist, dict) else None,
+                                    (
+                                        artist.get("name")
+                                        if isinstance(artist, dict)
+                                        else None
+                                    ),
+                                    (
+                                        artist.get("twitter")
+                                        if isinstance(artist, dict)
+                                        else None
+                                    ),
                                     bool(image.get("is_nsfw", False)),
                                     json.dumps(tags),
                                 )
-                                
+
                                 waifu_row = self.db.get_waifu_by_api_id(waifu_api_id)
                                 waifu_db_id = waifu_row[0] if waifu_row else None
                             else:
@@ -139,11 +150,12 @@ class Waifu(commands.Cog):
                             waifu_db_id = None
 
                         embed = discord.Embed(
-                            title=f"✨ Spawned Waifu ~ {tag}", color=discord.Color.random()
+                            title=f"✨ Spawned Waifu ~ {tag}",
+                            color=discord.Color.random(),
                         )
                         embed.set_image(url=image.get("url"))
                         artist = image.get("artist") or {}
-                        
+
                         if artist:
                             embed.add_field(
                                 name="Artist",
@@ -151,12 +163,11 @@ class Waifu(commands.Cog):
                                 inline=True,
                             )
 
-                        tags_list = ", ".join([t.get("name") for t in image.get("tags", [])]) or "None"
-                        embed.add_field(name="Tags", value=tags_list, inline=False)
                         view = ClaimView(self, waifu_db_id)
 
                         try:
                             await channel.send(embed=embed, view=view)
+                            logger.info(f"Auto Posted Waifu To {channel.id}")
                         except Exception:
                             logger.exception("Failed Sending Waifu To %s", channel)
 
@@ -180,16 +191,16 @@ class Waifu(commands.Cog):
     def _format_last_claim(self, last_row):
         if not last_row:
             return "Never"
-        
+
         ts = last_row[0]
-        
+
         if not ts:
             return "Never"
-        
+
         try:
             if isinstance(ts, str):
                 return ts
-            
+
             return str(ts)
         except Exception:
             return str(ts)
@@ -227,10 +238,10 @@ class Waifu(commands.Cog):
         )
         embed.add_field(name="Username", value=username, inline=False)
         embed.add_field(name="Total Waifus", value=str(waifu_count), inline=False)
-
-        embed.add_field(name='\u200b', value='\u200b', inline=False)
-        
         embed.add_field(name="Last Claim", value=last_claim, inline=False)
+
+        if member.display_avatar:
+            embed.set_thumbnail(url=member.display_avatar.url)
 
         await ctx.respond(embed=embed)
 
@@ -277,22 +288,30 @@ class Waifu(commands.Cog):
 
         pages = []
         for w in waifus:
-            embed = discord.Embed(title=f"Waifu #{w[0]}", color=discord.Color.random())
-            
+            embed = discord.Embed(title=f"Waifu {w[0]}", color=discord.Color.random())
+
             embed.set_image(url=w[2])
 
             embed.add_field(name="Artist", value=w[5] or "Unknown", inline=True)
-            embed.add_field(name="Source", value=f'[Link]({w[4]})' or "Unknown", inline=True)
+            embed.add_field(
+                name="Source", value=f"[Link]({w[4]})" or "Unknown", inline=True
+            )
 
-            embed.add_field(name="NSFW", value=str(bool(w[7])), inline=False)
-            embed.add_field(name="Tags", value=w[8] or "", inline=True)
+            if w[7] == 1:
+                embed.add_field(name="NSFW", value=str(bool(w[7])), inline=False)
+
+            embed.add_field(
+                name="Tags",
+                value=", ".join(map(str, w[8])) if w[8] else "",
+                inline=True,
+            )
             pages.append(embed)
 
         view = PagesView(pages, ctx.author.id)
         await ctx.respond(embed=pages[0], view=view)
 
     @discord.slash_command(name="leaderboard", description="Top Waifu Collectors")
-    async def leaderboard_cmd(self, ctx: discord.ApplicationContext, limit: int = 10):
+    async def leaderboard_cmd(self, ctx: discord.ApplicationContext):
         if not self.db:
             return await ctx.respond(
                 embed=discord.Embed(
@@ -302,9 +321,9 @@ class Waifu(commands.Cog):
                 )
             )
 
-        rows = self.db.get_leaderboard(limit)
-        embed = discord.Embed(title="Leaderboard", color=discord.Color.gold())
-        
+        rows = self.db.get_leaderboard(10)
+        embed = discord.Embed(title="💖 Waifu Leaderboard ~", color=discord.Color.gold())
+
         text = ""
 
         for i, r in enumerate(rows, start=1):
@@ -312,74 +331,6 @@ class Waifu(commands.Cog):
 
         embed.description = text or "No Data!"
         await ctx.respond(embed=embed)
-
-    @discord.slash_command(name="spawn", description="Spawn A Waifu Now")
-    @option("only_me", description="If True Restrict Claims By Others", required=False, default=False)
-    async def spawn_cmd(self, ctx: discord.ApplicationContext, only_me: bool = False, tag: str = "waifu"):
-        try:
-            await ctx.defer()
-            cfg = load_config()
-
-            owner_cfg = cfg.get("owner_id")
-            owner_ids = []
-            
-            if owner_cfg:
-                if isinstance(owner_cfg, list):
-                    owner_ids = [int(x) for x in owner_cfg if isinstance(x, (int, str))]
-                else:
-                    try:
-                        owner_ids = [int(owner_cfg)]
-                    except Exception:
-                        owner_ids = []
-
-            if cfg.get("only_spawner") and owner_ids and ctx.author.id not in owner_ids:
-                return await ctx.respond(embed=discord.Embed(title="Unauthorized", description="Only the configured owner can spawn waifus.", color=discord.Color.red()))
-
-            image = await self.fetch_waifu([tag], nsfw=False)
-            if not image:
-                return await ctx.respond(embed=discord.Embed(title="Error", description="Failed to fetch from API.", color=discord.Color.red()))
-
-            try:
-                if self.db:
-                    waifu_api_id = image.get("image_id") or image.get("signature")
-                    tags = [t.get("name") for t in image.get("tags", [])]
-                    artist = image.get("artist") or {}
-                    
-                    self.db.add_waifu(
-                        waifu_api_id,
-                        
-                        image.get("url"),
-                        image.get("preview_url"),
-                        image.get("source"),
-
-                        artist.get("name") if isinstance(artist, dict) else None,
-                        artist.get("twitter") if isinstance(artist, dict) else None,
-                        
-                        bool(image.get("is_nsfw", False)),
-                        json.dumps(tags),
-                    )
-                    waifu_row = self.db.get_waifu_by_api_id(waifu_api_id)
-                    waifu_db_id = waifu_row[0] if waifu_row else None
-                else:
-                    waifu_db_id = None
-
-            except Exception:
-                logger.exception("Failed Saving Waifu To Database")
-                waifu_db_id = None
-
-            embed = discord.Embed(title=f"✨ Spawned Waifu ~ {tag}", color=discord.Color.random())
-            embed.set_image(url=image.get("url"))
-            artist = image.get("artist") or {}
-            
-            tags_list = ", ".join([t.get("name") for t in image.get("tags", [])]) or "None"
-            embed.add_field(name="Tags", value=tags_list, inline=True)
-
-            view = ClaimView(self, waifu_db_id)
-            await ctx.respond(embed=embed, view=view)
-
-        except Exception as e:
-            logger.exception("Error in spawn command: %s", e)
-            await ctx.respond(embed=discord.Embed(title="Error", description=str(e), color=discord.Color.red()))
 
     async def fetch_waifu(self, tags, nsfw=False):
         params = {
@@ -603,76 +554,79 @@ class ClaimView(discord.ui.View):
         self.waifu_db_id = waifu_db_id
 
     @discord.ui.button(
-        label="Claim", style=discord.ButtonStyle.primary, custom_id="claim_waifu"
+        label="", style=discord.ButtonStyle.secondary, custom_id="claim_waifu", emoji="♥️"
     )
     async def claim_button(
         self, button: discord.ui.Button, interaction: discord.Interaction
     ):
-        # basic checks
+        # Basic Checks
         user = interaction.user
         if not self.cog.db:
             return await interaction.response.send_message(
-                "Database unavailable.", ephemeral=True
+                "Database Unavailable.", ephemeral=True
             )
 
-        # check if waifu exists in DB
+        # Check If Waifu Exsist In DB
         if not self.waifu_db_id:
             return await interaction.response.send_message(
-                "This waifu cannot be claimed (not saved).", ephemeral=True
+                "This Waifu Cannot Be Claimed!", ephemeral=True
             )
 
-        # cooldown check
+        # Cooldown Check
         last = self.cog.db.get_last_claim_time(user.id)
         if last and last[0]:
             try:
                 last_time = datetime.datetime.strptime(last[0], "%Y-%m-%d %H:%M:%S")
                 now = datetime.datetime.utcnow()
+
                 elapsed = (now - last_time).total_seconds()
+                cooldown_end = int(time.time() + (self.cog.claim_cooldown - elapsed))
+
                 if elapsed < self.cog.claim_cooldown:
                     return await interaction.response.send_message(
-                        f"You can only claim once every {self.cog.claim_cooldown}s. Try again in {int(self.cog.claim_cooldown - elapsed)}s.",
+                        f"You Can Claim Every 2 Hours."
+                        f"Try Again At <t:{cooldown_end}:R>.",
                         ephemeral=True,
                     )
             except Exception:
-                # ignore parsing issues
                 pass
 
-        # check already claimed
+        # Check If Waifu Already Claimed
         if self.cog.db.is_waifu_claimed(self.waifu_db_id):
             return await interaction.response.send_message(
-                "This waifu is already claimed!", ephemeral=True
+                "This Waifu Is Already Claimed!", ephemeral=True
             )
 
-        # ensure user present in users table and update counts
         try:
-            # add user if missing
             self.cog.db.add_user(user.id, str(user))
+
             user_row = self.cog.db.get_user(user.id)
             internal_user_id = user_row[0] if user_row else None
             current_count = user_row[3] if user_row and len(user_row) > 3 else 0
             new_count = (current_count or 0) + 1
-            # update uses discord_id as first arg per implementation
+
             self.cog.db.update_user_waifu_count(user.id, new_count)
-            # add claim using internal ids
+
             waifu_internal_id = self.waifu_db_id
+
             if internal_user_id is None or waifu_internal_id is None:
-                raise RuntimeError("Invalid user or waifu id")
+                raise RuntimeError("Invalid User Or Waifu ID")
+
             self.cog.db.add_claim(internal_user_id, waifu_internal_id)
             self.cog.db.update_last_claim(user.id)
         except Exception:
-            logger.exception("Error while processing claim")
+            logger.exception("Error While Processing Claim")
             return await interaction.response.send_message(
-                "Failed to claim waifu due to internal error.", ephemeral=True
+                "Failed To Claim Waifu Due To Internal Error!", ephemeral=True
             )
 
-        # edit embed to show claimed
         try:
             msg = interaction.message
             embed = (
                 msg.embeds[0] if msg.embeds else discord.Embed(title="Waifu Claimed")
             )
             embed.set_footer(
-                text=f"Claimed by {user.display_name} 🎉",
+                text=f"Claimed By {user.display_name} 🫶",
                 icon_url=user.display_avatar.url,
             )
             await msg.edit(embed=embed, view=None)
@@ -680,7 +634,7 @@ class ClaimView(discord.ui.View):
             logger.exception("Failed to edit message after claim")
 
         await interaction.response.send_message(
-            "You claimed this waifu! 🎉", ephemeral=True
+            "You Claimed This Waifu! 🫶", ephemeral=True
         )
 
 
@@ -694,12 +648,12 @@ class PagesView(discord.ui.View):
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
         return interaction.user.id == self.author_id
 
-    @discord.ui.button(label="Prev", style=discord.ButtonStyle.secondary)
+    @discord.ui.button(label="Prev", style=discord.ButtonStyle.secondary, emoji="⬅️")
     async def prev(self, button: discord.ui.Button, interaction: discord.Interaction):
         self.page = (self.page - 1) % len(self.pages)
         await interaction.response.edit_message(embed=self.pages[self.page], view=self)
 
-    @discord.ui.button(label="Next", style=discord.ButtonStyle.secondary)
+    @discord.ui.button(label="Next", style=discord.ButtonStyle.secondary, emoji="➡️")
     async def next(self, button: discord.ui.Button, interaction: discord.Interaction):
         self.page = (self.page + 1) % len(self.pages)
         await interaction.response.edit_message(embed=self.pages[self.page], view=self)
