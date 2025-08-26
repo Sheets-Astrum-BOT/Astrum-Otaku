@@ -1,0 +1,11 @@
+{
+  "enabled": true,
+  "channel_id": [
+    1409963327408308324
+  ],
+  "interval_minutes": 60,
+  "only_spawner": false,
+  "owner_id": [
+    727012870683885578
+  ]
+}
