@@ -4,6 +4,7 @@ import discord
 import datetime
 from dotenv import load_dotenv
 from discord.ext import commands
+from extensions.database import database
 from extensions.logger import setup_logger
 
 
@@ -28,6 +29,12 @@ async def on_ready():
     logger.info(f"Guilds    : {len(bot.guilds)}")
     logger.info("-------------------------------")
     logger.info("Bot Is Ready!")
+    logger.info("-------------------------------")
+
+    logger.info("Setting Up Database ~ ")
+    database("astrumotaku.db")
+    logger.info("Database Setup Complete")
+
     logger.info("-------------------------------")
 
     await bot.change_presence(activity=discord.Game("With Waifus ❤️"))
