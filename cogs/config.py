@@ -8,6 +8,7 @@ from extensions.logger import setup_logger
 logger = setup_logger(__name__)
 
 MEME_CONFIG_PATH = "memesConfig.json"
+WAIFU_CONFIG_PATH = "waifuConfig.json"
 QUOTES_CONFIG_PATH = "quotesConfig.json"
 
 MEME_DEFAULT_CONFIG = {
@@ -16,6 +17,13 @@ MEME_DEFAULT_CONFIG = {
     "interval_minutes": 60,
 }
 
+WAIFU_DEFAULT_CONFIG = {
+    "enabled": True,
+    "channel_id": [],
+    "interval_minutes": 60,
+    "only_spawner": False,
+    "owner_id": [727012870683885578],
+}
 
 DEFAULT_QUOTES_CONFIG = {
     "enabled": False,
@@ -24,66 +32,45 @@ DEFAULT_QUOTES_CONFIG = {
 }
 
 
-def load_config():
-    if not os.path.exists(MEME_CONFIG_PATH):
-        save_config(MEME_DEFAULT_CONFIG)
-        return MEME_DEFAULT_CONFIG.copy()
+def load_config(config_path, default_cfg):
+    if not os.path.exists(config_path):
+        save_config(default_cfg, config_path)
+        return default_cfg.copy()
     try:
-        with open(MEME_CONFIG_PATH, "r", encoding="utf-8") as f:
+        with open(config_path, "r", encoding="utf-8") as f:
             cfg = json.load(f)
-            for k, v in MEME_DEFAULT_CONFIG.items():
+            for k, v in default_cfg.items():
                 cfg.setdefault(k, v)
             return cfg
     except Exception:
-        logger.exception("Failed Loading Meme Config - Using Defaults")
-        return MEME_DEFAULT_CONFIG.copy()
+        logger.exception(f"Failed Loading {config_path} - Using Defaults")
+        return default_cfg.copy()
 
 
-def save_config(cfg):
+def save_config(cfg, config_path):
     try:
-        with open(MEME_CONFIG_PATH, "w", encoding="utf-8") as f:
+        with open(config_path, "w", encoding="utf-8") as f:
             json.dump(cfg, f, indent=2)
     except Exception:
-        logger.exception("Failed Saving Meme Config")
-
-
-def load_quotes_config():
-    if not os.path.exists(QUOTES_CONFIG_PATH):
-        save_quotes_config(DEFAULT_QUOTES_CONFIG)
-        return DEFAULT_QUOTES_CONFIG.copy()
-    try:
-        with open(QUOTES_CONFIG_PATH, "r", encoding="utf-8") as f:
-            cfg = json.load(f)
-            for k, v in DEFAULT_QUOTES_CONFIG.items():
-                cfg.setdefault(k, v)
-            return cfg
-    except Exception:
-        logger.exception("Failed Loading Quotes Config - Using Defaults")
-        return DEFAULT_QUOTES_CONFIG.copy()
-
-
-def save_quotes_config(cfg):
-    try:
-        with open(QUOTES_CONFIG_PATH, "w", encoding="utf-8") as f:
-            json.dump(cfg, f, indent=2)
-    except Exception:
-        logger.exception("Failed Saving Quotes Config")
+        logger.exception(f"Failed Saving {config_path}")
 
 
 class Config(commands.Cog):
     config = discord.SlashCommandGroup("config", "Bot Configuration Commands")
 
     meme = config.create_subgroup("meme", "Configure Meme Posting")
+    waifu = config.create_subgroup("waifu", "Configure Waifu Posting")
     quote = config.create_subgroup("quote", "Configure Quote Posting")
 
     def __init__(self, bot):
         self.bot = bot
-        self.config = load_config()
-        self.quotes_config = load_quotes_config()
+        self.meme_config = load_config(MEME_CONFIG_PATH, MEME_DEFAULT_CONFIG)
+        self.waifu_config = load_config(WAIFU_CONFIG_PATH, WAIFU_DEFAULT_CONFIG)
+        self.quotes_config = load_config(QUOTES_CONFIG_PATH, DEFAULT_QUOTES_CONFIG)
 
-    async def update_and_confirm(self, ctx, updates: dict):
-        self.config.update(updates)
-        save_config(self.config)
+    async def update_and_confirm_meme(self, ctx, updates: dict):
+        self.meme_config.update(updates)
+        save_config(self.meme_config, MEME_CONFIG_PATH)
 
         desc = "\n".join([f"**{k}** → **{v}**" for k, v in updates.items()])
         await ctx.respond(
@@ -97,12 +84,26 @@ class Config(commands.Cog):
 
     async def update_and_confirm_quotes(self, ctx, updates: dict):
         self.quotes_config.update(updates)
-        save_quotes_config(self.quotes_config)
+        save_config(self.quotes_config, QUOTES_CONFIG_PATH)
 
         desc = "\n".join([f"**{k}** → **{v}**" for k, v in updates.items()])
         await ctx.respond(
             embed=discord.Embed(
                 title="⚙️ Quotes Config Updated",
+                description=desc,
+                color=discord.Color.green(),
+            ),
+            ephemeral=True,
+        )
+
+    async def update_and_confirm_waifu(self, ctx, updates: dict):
+        self.waifu_config.update(updates)
+        save_config(self.waifu_config, WAIFU_CONFIG_PATH)
+
+        desc = "\n".join([f"**{k}** -> **{v}**" for k, v in updates.items()])
+        await ctx.respond(
+            embed=discord.Embed(
+                title="⚙️ Waifu Config Updated",
                 description=desc,
                 color=discord.Color.green(),
             ),
@@ -163,14 +164,22 @@ class Config(commands.Cog):
             updates["interval_minutes"] = interval
 
         if updates:
-            await self.update_and_confirm(ctx, updates)
+            await self.update_and_confirm_meme(ctx, updates)
         else:
             await ctx.respond("⚠️ No Changes Provided.", ephemeral=True)
 
+    @meme.command(name="clear", description="Clear Current Meme Config")
+    async def meme_clear(self, ctx):
+        if not ctx.user.guild_permissions.administrator:
+            return await ctx.respond(
+                "❌ You Need **Admin** Permissions To Do This.", ephemeral=True
+            )
+
+        await self.update_and_confirm_meme(ctx, MEME_DEFAULT_CONFIG)
+
     @meme.command(name="show", description="Show Current Meme Config")
     async def meme_show(self, ctx):
-
-        cfg = self.config
+        cfg = self.meme_config
         chlist = cfg.get("channel_id") or []
         channel = ", ".join([f"<#{c}>" for c in chlist]) if chlist else "Not Set"
 
@@ -182,6 +191,83 @@ class Config(commands.Cog):
         embed.add_field(name="Channel", value=channel)
         embed.add_field(name="Interval", value=f"{cfg['interval_minutes']} minutes")
 
+        await ctx.respond(embed=embed, ephemeral=True)
+
+    # ───── WAIFU CONFIG ─────
+    @waifu.command(name="set", description="Set Waifu Posting Config")
+    @option(
+        "toggle",
+        description="Enable/Disable Waifu",
+        required=False,
+        choices=["true", "false"],
+    )
+    @option(
+        "channel",
+        discord.TextChannel,
+        description="Channel For Waifu Autoposting",
+        required=False,
+    )
+    @option(
+        "interval", int, description="Interval In Minutes (10 Minutes)", required=False
+    )
+    async def waifu_set(
+        self,
+        ctx: discord.ApplicationContext,
+        toggle: str = None,
+        channel: discord.TextChannel = None,
+        interval: int = None,
+    ):
+        if not ctx.user.guild_permissions.administrator:
+            return await ctx.respond(
+                "❌ You Need **Admin** Permissions To Do This.", ephemeral=True
+            )
+
+        updates = {}
+        if toggle is not None:
+            updates["enabled"] = toggle.lower() == "true"
+
+        if channel is not None:
+            current = self.waifu_config.get("channel_id") or []
+
+            if channel.id not in current:
+                current.append(channel.id)
+
+            updates["channel_id"] = current
+
+        if interval is not None:
+            if interval < 10:
+                return await ctx.respond(
+                    "⚠️ Minimum Interval Is **10 Minutes**.", ephemeral=True
+                )
+            updates["interval_minutes"] = interval
+
+        if updates:
+            await self.update_and_confirm_waifu(ctx, updates)
+        else:
+            await ctx.respond("⚠️ No Changes Provided.", ephemeral=True)
+
+    @waifu.command(name="clear", description="Clear Current Waifu Config")
+    async def waifu_clear(self, ctx):
+        if not ctx.user.guild_permissions.administrator:
+            return await ctx.respond(
+                "❌ You Need **Admin** Permissions To Do This.", ephemeral=True
+            )
+
+        await self.update_and_confirm_waifu(ctx, WAIFU_DEFAULT_CONFIG)
+
+    @waifu.command(name="show", description="Show Current Waifu Config")
+    async def waifu_show(self, ctx):
+        cfg = self.waifu_config
+        chlist = cfg.get("channel_id") or []
+        channel = ", ".join([f"<#{c}>" for c in chlist]) if chlist else "Not Set"
+
+        embed = discord.Embed(
+            title="⚙️ Quotes Config",
+            color=discord.Color.blurple(),
+        )
+        embed.add_field(name="Enabled", value=str(cfg["enabled"]))
+        embed.add_field(name="Channel", value=channel)
+        embed.add_field(name="Interval", value=f"{cfg['interval_minutes']} minutes")
         await ctx.respond(embed=embed, ephemeral=True)
 
     # ───── QUOTES CONFIG ─────
@@ -222,7 +308,7 @@ class Config(commands.Cog):
 
             if channel.id not in current:
                 current.append(channel.id)
-            
+
             updates["channel_id"] = current
 
         if interval is not None:
@@ -237,7 +323,16 @@ class Config(commands.Cog):
         else:
             await ctx.respond("⚠️ No Changes Provided.", ephemeral=True)
 
-    @quote.command(name="show", description="Show Current Quote Config")
+    @quote.command(name="clear", description="Clear Current Quotes Config")
+    async def quotes_clear(self, ctx):
+        if not ctx.user.guild_permissions.administrator:
+            return await ctx.respond(
+                "❌ You Need **Admin** Permissions To Do This.", ephemeral=True
+            )
+
+        await self.update_and_confirm_quotes(ctx, DEFAULT_QUOTES_CONFIG)
+
+    @quote.command(name="show", description="Show Current Quotes Config")
     async def quote_show(self, ctx):
         cfg = self.quotes_config
         chlist = cfg.get("channel_id") or []
