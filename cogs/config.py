@@ -149,7 +149,7 @@ class Config(commands.Cog):
             updates["enabled"] = toggle.lower() == "true"
 
         if channel is not None:
-            current = self.config.get("channel_id") or []
+            current = self.meme_config.get("channel_id") or []
 
             if channel.id not in current:
                 current.append(channel.id)
